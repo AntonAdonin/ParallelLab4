@@ -73,7 +73,7 @@ class WindowImage:
     def __init__(self, window_name="WindowImage", fps: int = 60):
         self.delay = 1 / fps
         self.window_name = window_name
-        cv2.namedWindow(self.window_name)
+        cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
 
     def show(self, image):
         time.sleep(self.delay)
@@ -127,9 +127,9 @@ def window_func(fps: int, frame_queue: Queue, sensor1_queue: Queue, sensor2_queu
     logger.debug("Ending window thread")
 
 
-def camera_func(camera: Sensor, sensor_queue: Queue):
+def camera_func(camera: Sensor, sensor_queue: Queue, main_thread_works):
     logger.debug("Starting camera thread")
-    while True:
+    while main_thread_works:
         frame = camera.get()
         try:
             sensor_queue.put_nowait(frame)
@@ -140,8 +140,8 @@ def camera_func(camera: Sensor, sensor_queue: Queue):
     logger.debug("Ending camera thread")
 
 
-def sensor_func(sensor: Sensor, sensor_queue: Queue):
-    while True:
+def sensor_func(sensor: Sensor, sensor_queue: Queue, main_thread_works):
+    while main_thread_works:
         result = sensor.get()
         try:
             sensor_queue.put_nowait(result)
@@ -150,6 +150,7 @@ def sensor_func(sensor: Sensor, sensor_queue: Queue):
 
 
 if __name__ == "__main__":
+    cv2.startWindowThread()
     parser = argparse.ArgumentParser(
         prog='Camera with sensors',
         description='Program starts streaming camera and shows sensor data.',
@@ -159,7 +160,7 @@ if __name__ == "__main__":
     parser.add_argument('-f', '--fps', help="frame rate value")
     args = parser.parse_args()
     logger.debug(f"--name {args.name} --size {args.size} --fps {args.fps}")
-    name = 0
+    name = 1
     w, h = 640, 480
     fps = 30
     if args.name is not None:
@@ -174,25 +175,69 @@ if __name__ == "__main__":
     sensor1 = SensorX(0.01)
     sensor2 = SensorX(0.1)
     sensor3 = SensorX(1)
-
     frame_queue = Queue(maxsize=2)
     sensor1_queue = Queue(maxsize=2)
     sensor2_queue = Queue(maxsize=2)
     sensor3_queue = Queue(maxsize=2)
+    main_thread_works = True
+    camera_thread = threading.Thread(target=camera_func, args=(camera, frame_queue, main_thread_works,))
 
-    camera_thread = threading.Thread(target=camera_func, args=(camera, frame_queue))
+    sensor_thread1 = threading.Thread(target=sensor_func, args=(sensor1, sensor1_queue, main_thread_works,))
 
-    sensor_thread1 = threading.Thread(target=sensor_func, args=(sensor1, sensor1_queue,))
+    sensor_thread2 = threading.Thread(target=sensor_func, args=(sensor2, sensor2_queue, main_thread_works,))
 
-    sensor_thread2 = threading.Thread(target=sensor_func, args=(sensor2, sensor2_queue,))
+    sensor_thread3 = threading.Thread(target=sensor_func, args=(sensor3, sensor3_queue, main_thread_works,))
 
-    sensor_thread3 = threading.Thread(target=sensor_func, args=(sensor3, sensor3_queue,))
-
-    window_thread = threading.Thread(target=window_func, args=(fps, frame_queue, sensor1_queue, sensor2_queue, sensor3_queue,))
+    # window_thread = threading.Thread(target=window_func, args=(fps, frame_queue, sensor1_queue, sensor2_queue, sensor3_queue,))
     camera_thread.start()
     sensor_thread3.start()
     sensor_thread2.start()
     sensor_thread1.start()
-    window_thread.start()
 
-    window_thread.join()
+    frame = np.random.rand(128, 128, 3)
+    logger.debug("Starting window thread")
+    window = WindowImage(fps=fps)
+    sensor1_res = None
+    sensor2_res = None
+    sensor3_res = None
+    while True:
+        key = cv2.waitKey(1) & 0xFF
+        if chr(key) == "q":
+            logger.info("'Q' pressed. Terminating window...")
+            break
+
+        try:
+            frame = frame_queue.get_nowait()
+        except queue.Empty:
+            pass
+        try:
+            sensor1_res = sensor1_queue.get_nowait()
+        except queue.Empty:
+            pass
+        try:
+            sensor2_res = sensor2_queue.get_nowait()
+        except queue.Empty:
+            pass
+        try:
+            sensor3_res = sensor3_queue.get_nowait()
+        except queue.Empty:
+            pass
+
+        cv2.rectangle(frame, (0, 0), (130, 70), (55, 81, 229), -1)
+        cv2.putText(frame, f"Sensor1 {sensor1_res}", (10, 20), 1,
+                    1, (0, 0, 0), 2)
+        cv2.putText(frame, f"Sensor2 {sensor2_res}", (10, 40), 1,
+                    1, (0, 0, 0), 2)
+        cv2.putText(frame, f"Sensor3 {sensor3_res}", (10, 60), 1,
+                    1, (0, 0, 0), 2)
+        if frame is None:
+            main_thread_works = False
+            break
+        window.show(frame)
+    window.__del__()
+    logger.debug("Ending window thread")
+    camera_thread.join()
+    sensor_thread1.join()
+    sensor_thread2.join()
+    sensor_thread3.join()
+
