@@ -50,25 +50,23 @@ class SensorCam(Sensor):
         self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
 
     def get(self):
-        ret, frame = self.camera.read()
-        return frame
-        # if not self.camera.isOpened():
-        #     logger.error("Error opening stream... trying to open")
-        #     try:
-        #         self.camera.open(self.name)
-        #     except Exception as error:
-        #         logger.error(f"Can`t open stream: {error}")
-        #         return None
-        # try:
-        #     ret, frame = self.camera.read()
-        #     if ret:
-        #         return frame
-        #     else:
-        #         logger.error(f"Incorrect reading frame")
-        #         return None
-        # except Exception as error:
-        #     logger.error(f"Error reading frame: {error}")
-        # return None
+        if not self.camera.isOpened():
+            logger.error("Error opening stream... trying to open")
+            try:
+                self.camera.open(self.name)
+            except Exception as error:
+                logger.error(f"Can`t open stream: {error}")
+                return None
+        try:
+            ret, frame = self.camera.read()
+            if ret:
+                return frame
+            else:
+                logger.error(f"Incorrect reading frame")
+                return None
+        except Exception as error:
+            logger.error(f"Error reading frame: {error}")
+        return None
 
     def __del__(self):
         self.camera.release()
