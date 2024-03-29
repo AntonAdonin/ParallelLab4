@@ -93,22 +93,8 @@ def camera_func(camera: Sensor, sensor_queue: Queue):
         try:
             sensor_queue.put_nowait(frame)
         except queue.Full:
-            pass
-        if frame is None:
-            break
-    logger.debug("Ending camera thread")
-
-
-def camera_func_params(params: tuple, sensor_queue: Queue):
-    name, w, h = params
-    camera = SensorCam(name=name, width=w, height=h)
-    logger.debug("Starting camera thread")
-    while not terminate_flag:
-        frame = camera.get()
-        try:
-            sensor_queue.put_nowait(frame)
-        except queue.Full:
-            pass
+            sensor_queue.get()
+            sensor_queue.put(frame)
         if frame is None:
             break
     logger.debug("Ending camera thread")
@@ -121,19 +107,8 @@ def sensor_func(sensor: Sensor, sensor_queue: Queue):
         try:
             sensor_queue.put_nowait(result)
         except queue.Full:
-            pass
-    logger.debug("Ending sensor thread")
-
-
-def sensor_func_param(delay: float, sensor_queue: Queue):
-    sensor = SensorX(delay)
-    logger.debug("Starting sensor thread")
-    while not terminate_flag:
-        result = sensor.get()
-        try:
-            sensor_queue.put_nowait(result)
-        except queue.Full:
-            pass
+            sensor_queue.get()
+            sensor_queue.put(result)
     logger.debug("Ending sensor thread")
 
 
@@ -149,7 +124,7 @@ if __name__ == "__main__":
     parser.add_argument('-f', '--fps', help="frame rate value")
     args = parser.parse_args()
     logger.debug(f"--name {args.name} --size {args.size} --fps {args.fps}")
-    name = 1
+    name = 1 # 0 on windows, 1 on mac os
     w, h = 1280, 720
     fps = 60
     if args.name is not None:
@@ -162,21 +137,16 @@ if __name__ == "__main__":
     sensor1_queue = Queue(maxsize=2)
     sensor2_queue = Queue(maxsize=2)
     sensor3_queue = Queue(maxsize=2)
-    objects_in_main_thread = False
-    if objects_in_main_thread:
-        camera = SensorCam(name=name, width=w, height=h)
-        sensor1 = SensorX(0.01)
-        sensor2 = SensorX(0.1)
-        sensor3 = SensorX(1)
-        camera_thread = threading.Thread(target=camera_func, args=(camera, frame_queue,))
-        sensor_thread1 = threading.Thread(target=sensor_func, args=(sensor1, sensor1_queue,))
-        sensor_thread2 = threading.Thread(target=sensor_func, args=(sensor2, sensor2_queue,))
-        sensor_thread3 = threading.Thread(target=sensor_func, args=(sensor3, sensor3_queue,))
-    else:
-        camera_thread = threading.Thread(target=camera_func_params, args=((name, w, h), frame_queue,))
-        sensor_thread1 = threading.Thread(target=sensor_func_param, args=(0.01, sensor1_queue,))
-        sensor_thread2 = threading.Thread(target=sensor_func_param, args=(0.1, sensor2_queue,))
-        sensor_thread3 = threading.Thread(target=sensor_func_param, args=(1, sensor3_queue,))
+
+    camera = SensorCam(name=name, width=w, height=h)
+    sensor1 = SensorX(0.01)
+    sensor2 = SensorX(0.1)
+    sensor3 = SensorX(1)
+
+    camera_thread = threading.Thread(target=camera_func, args=(camera, frame_queue,))
+    sensor_thread1 = threading.Thread(target=sensor_func, args=(sensor1, sensor1_queue,))
+    sensor_thread2 = threading.Thread(target=sensor_func, args=(sensor2, sensor2_queue,))
+    sensor_thread3 = threading.Thread(target=sensor_func, args=(sensor3, sensor3_queue,))
 
     sensor_thread3.start()
     sensor_thread2.start()
